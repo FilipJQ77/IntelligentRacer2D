@@ -1,5 +1,5 @@
 from abc import ABC
-from utilities import blit_rotate_center, scale_image
+from utilities import blit_rotate_center, scale_image, key_left, key_right, key_up, key_down
 import math
 import pygame
 import time
@@ -70,16 +70,16 @@ class Car(ABC):
 
     def move_player(self):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
+        if key_left(keys):
             self.rotate(left=True)
-        if keys[pygame.K_RIGHT]:
+        if key_right(keys):
             self.rotate(right=True)
-        if not keys[pygame.K_UP] and not keys[pygame.K_DOWN]:
+        if not key_up(keys) and not key_down(keys):
             self.decelerate()
         else:
-            if keys[pygame.K_UP]:
+            if key_up(keys):
                 self.accelerate()
-            if keys[pygame.K_DOWN]:
+            if key_down(keys):
                 self.brake()
 
         self.move()
