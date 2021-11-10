@@ -1,4 +1,5 @@
 from abc import ABC
+from collections import namedtuple
 from utilities import blit_rotate_center, scale_image, key_left, key_right, key_up, key_down
 import math
 import pygame
@@ -18,6 +19,8 @@ WIDTH = TRACK.get_width()
 # HEIGHT = 800
 HEIGHT = TRACK.get_height()
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
+
+DEBUG = False
 
 
 class Car(ABC):
@@ -58,7 +61,7 @@ class Car(ABC):
 
     def bounce(self):
         # self.velocity = -self.velocity  # todo improve
-        print(f"Collide {pygame.time.get_ticks()}")
+        print(f"Collide {pygame.time.get_ticks()} {DEBUG}")
 
     def move(self):
         angle = math.radians(self.angle)
@@ -68,18 +71,17 @@ class Car(ABC):
         self.x -= horizontal_velocity
         self.y -= vertical_velocity
 
-    def move_player(self):
-        keys = pygame.key.get_pressed()
-        if key_left(keys):
+    def move_player(self, action: namedtuple):
+        if action.left:
             self.rotate(left=True)
-        if key_right(keys):
+        if action.right:
             self.rotate(right=True)
-        if not key_up(keys) and not key_down(keys):
+        if not action.throttle and not action.brake:
             self.decelerate()
         else:
-            if key_up(keys):
+            if action.throttle:
                 self.accelerate()
-            if key_down(keys):
+            if action.brake:
                 self.brake()
 
         self.move()
@@ -88,7 +90,17 @@ class Car(ABC):
             self.bounce()
 
     def draw(self, window):
-        blit_rotate_center(window, self.image, (self.x, self.y), self.angle)
+        rotated_car = pygame.transform.rotate(CAR, self.angle)
+        offset = (int(self.x), int(self.y))
+        car_mask = pygame.mask.from_surface(rotated_car)
+
+        # todo remove
+        if DEBUG:
+            window.blit(rotated_car, offset)
+        else:
+            blit_rotate_center(window, self.image, (self.x, self.y), self.angle)
+            
+        pygame.draw.circle(window, (255, 0, 0), (self.x, self.y), 5)
 
 
 def draw(window, images, car):
@@ -105,10 +117,10 @@ def main():
     running = True
     clock = pygame.time.Clock()
 
-    acceleration = 0.5
+    acceleration = 0.3
     deceleration = 0.1
     brake_power = 0.5
-    max_velocity = 10
+    max_velocity = 6
     rotation_velocity = 4
     start_angle = 180
     start_position = (100, 0)
@@ -126,7 +138,35 @@ def main():
                 running = False
                 break
 
-        player.move_player()
+        keys = pygame.key.get_pressed()
+        # todo remove
+        global DEBUG
+        if keys[pygame.K_t]:
+            DEBUG = not DEBUG
+
+        action = namedtuple("Action", ("throttle", "brake", "left", "right"))
+
+        if key_up(keys):
+            action.throttle = True
+        else:
+            action.throttle = False
+
+        if key_down(keys):
+            action.brake = True
+        else:
+            action.brake = False
+
+        if key_left(keys):
+            action.left = True
+        else:
+            action.left = False
+
+        if key_right(keys):
+            action.right = True
+        else:
+            action.right = False
+
+        player.move_player(action)
 
     pygame.quit()
 
