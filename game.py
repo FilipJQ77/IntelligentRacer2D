@@ -1,11 +1,13 @@
 from abc import ABC
 from collections import namedtuple
-from utilities import blit_rotate_center, scale_image, key_left, key_right, key_up, key_down
+from utilities import rotate_image, scale_image, key_left, key_right, key_up, key_down
 import math
 import pygame
 import time
 
 CAR = scale_image(pygame.image.load("img/purple-car.png"), 0.6)
+CAR_WIDTH = CAR.get_width()
+CAR_HEIGHT = CAR.get_height()
 TRACK = pygame.image.load("img/track.png")
 # TRACK = pygame.image.load("img/track2.png")
 TRACK_BORDER = pygame.image.load("img/track_border.png")
@@ -20,21 +22,20 @@ WIDTH = TRACK.get_width()
 HEIGHT = TRACK.get_height()
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 
-DEBUG = False
-
 
 class Car(ABC):
-    def __init__(self, acceleration, deceleration, brake_power, max_velocity, rotation_velocity, start_angle=0,
+    def __init__(self, acceleration, deceleration, brake_power, max_velocity, rotation_speed, start_angle=0,
                  start_position=(0, 0)):
-        self.image = CAR
         self.acceleration = acceleration
         self.brake_power = brake_power
         self.deceleration = deceleration
-        self.max_speed = max_velocity
+        self.max_velocity = max_velocity
         self.velocity = 0
-        self.rotation_speed = rotation_velocity
+        self.rotation_speed = rotation_speed
         self.angle = start_angle
         self.x, self.y = start_position
+        self.image = CAR
+        self.image_rect = self.image.get_rect()
 
     def rotate(self, left=False, right=False):
         if self.velocity > 0:
@@ -44,7 +45,7 @@ class Car(ABC):
                 self.angle -= self.rotation_speed
 
     def accelerate(self):
-        self.velocity = min(self.velocity + self.acceleration, self.max_speed)
+        self.velocity = min(self.velocity + self.acceleration, self.max_velocity)
 
     def decelerate(self):
         self.velocity = max(self.velocity - self.deceleration, 0)
@@ -53,15 +54,15 @@ class Car(ABC):
         self.velocity = max(self.velocity - self.brake_power, 0)
 
     def collide(self, mask, x, y):
-        rotated_car = pygame.transform.rotate(CAR, self.angle)
-        car_mask = pygame.mask.from_surface(rotated_car)
-        offset = (int(self.x - x), int(self.y - y))
+        car_mask = pygame.mask.from_surface(self.image)
+        offset_x, offset_y, _, _ = self.image_rect
+        offset = (offset_x, offset_y)
         intersection_point = mask.overlap(car_mask, offset)
         return intersection_point
 
     def bounce(self):
         # self.velocity = -self.velocity  # todo improve
-        print(f"Collide {pygame.time.get_ticks()} {DEBUG}")
+        print(f"Collide {pygame.time.get_ticks()}")
 
     def move(self):
         angle = math.radians(self.angle)
@@ -86,20 +87,14 @@ class Car(ABC):
 
         self.move()
 
+        # get current car position with rotation
+        self.image, self.image_rect = rotate_image(CAR, (self.x, self.y), (CAR_WIDTH / 2, CAR_HEIGHT / 2), self.angle)
+
         if self.collide(TRACK_BORDER_MASK, 0, 0):
             self.bounce()
 
     def draw(self, window):
-        rotated_car = pygame.transform.rotate(CAR, self.angle)
-        offset = (int(self.x), int(self.y))
-        car_mask = pygame.mask.from_surface(rotated_car)
-
-        # todo remove
-        if DEBUG:
-            window.blit(rotated_car, offset)
-        else:
-            blit_rotate_center(window, self.image, (self.x, self.y), self.angle)
-            
+        window.blit(self.image, self.image_rect)
         pygame.draw.circle(window, (255, 0, 0), (self.x, self.y), 5)
 
 
@@ -139,10 +134,6 @@ def main():
                 break
 
         keys = pygame.key.get_pressed()
-        # todo remove
-        global DEBUG
-        if keys[pygame.K_t]:
-            DEBUG = not DEBUG
 
         action = namedtuple("Action", ("throttle", "brake", "left", "right"))
 
