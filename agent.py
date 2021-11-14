@@ -14,7 +14,8 @@ class Agent:
         self.model = None  # TODO
         self.trainer = None  # TODO
 
-    def get_state(self, game: Game):
+    @staticmethod
+    def get_state(game: Game):
         car_x = game.player.x
         car_y = game.player.y
         car_angle = game.player.angle

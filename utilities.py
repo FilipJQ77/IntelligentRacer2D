@@ -30,6 +30,7 @@ def rotate_image(image, position, origin_position, angle):
 def create_action_tuple():
     return namedtuple("Action", ("throttle", "brake", "left", "right"))
 
+
 def key_left(keys) -> bool:
     return keys[pygame.K_LEFT] or keys[pygame.K_a]
 

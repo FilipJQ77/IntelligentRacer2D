@@ -15,9 +15,7 @@ TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 pygame.display.set_caption("Racer 2D")
 
 FPS = 60
-# WIDTH = 800
 WIDTH = TRACK.get_width()
-# HEIGHT = 800
 HEIGHT = TRACK.get_height()
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 
@@ -86,7 +84,7 @@ class Car(ABC):
 
         self.move()
 
-        # get current car position with rotation
+        # get current car position with rotation after moving
         self.image, self.image_rect = rotate_image(CAR, (self.x, self.y), (CAR_WIDTH / 2, CAR_HEIGHT / 2), self.angle)
 
         if self.collide(TRACK_BORDER_MASK, 0, 0):
@@ -99,6 +97,7 @@ class Car(ABC):
 
 class Game:
     def __init__(self):
+        self.window = WINDOW
         self.car_acceleration = 0.7
         self.car_deceleration = 0.2
         self.car_brake_power = 0.5
@@ -107,6 +106,7 @@ class Game:
         self.car_start_angle = 180
         self.car_start_position = (100, 0)
         self.player = self.initialise_car()
+        self.images = [(TRACK, (0, 0))]
 
     def initialise_car(self):
         return Car(self.car_acceleration,
@@ -117,25 +117,24 @@ class Game:
                    self.car_start_angle,
                    self.car_start_position)
 
-    def draw(self, window, images, car):
-        window.fill((12, 145, 18))
+    def draw(self):
+        self.window.fill((12, 145, 18))
 
-        for image, position in images:
-            window.blit(image, position)
+        for image, position in self.images:
+            self.window.blit(image, position)
 
-        car.draw(window)
+        self.player.draw(self.window)
+
         pygame.display.update()
 
     def human_player_game_loop(self):
         running = True
         clock = pygame.time.Clock()
 
-        images = [(TRACK, (0, 0))]
-
         while running:
             clock.tick(FPS)
 
-            self.draw(WINDOW, images, self.player)
+            self.draw()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
