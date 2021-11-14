@@ -106,6 +106,7 @@ class Game:
         self.car_rotation_velocity = 3.7
         self.car_start_angle = 180
         self.car_start_position = (100, 0)
+        self.player = self.initialise_car()
 
     def initialise_car(self):
         return Car(self.car_acceleration,
@@ -129,14 +130,12 @@ class Game:
         running = True
         clock = pygame.time.Clock()
 
-        player = self.initialise_car()
-
         images = [(TRACK, (0, 0))]
 
         while running:
             clock.tick(FPS)
 
-            self.draw(WINDOW, images, player)
+            self.draw(WINDOW, images, self.player)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -145,7 +144,7 @@ class Game:
 
             action = get_human_player_input()
 
-            player.move_player(action)
+            self.player.move_player(action)
 
         pygame.quit()
 

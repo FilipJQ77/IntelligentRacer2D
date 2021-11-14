@@ -27,9 +27,8 @@ def rotate_image(image, position, origin_position, angle):
     return rotated_image, rotated_image_rect
 
 
-def create_action():
+def create_action_tuple():
     return namedtuple("Action", ("throttle", "brake", "left", "right"))
-
 
 def key_left(keys) -> bool:
     return keys[pygame.K_LEFT] or keys[pygame.K_a]
@@ -48,7 +47,7 @@ def key_down(keys) -> bool:
 
 
 def get_human_player_input():
-    action = create_action()
+    action = create_action_tuple()
     keys = pygame.key.get_pressed()
     if key_up(keys):
         action.throttle = 1
