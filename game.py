@@ -1,9 +1,8 @@
 from abc import ABC
 from collections import namedtuple
-from utilities import rotate_image, scale_image, key_left, key_right, key_up, key_down
+from utilities import rotate_image, scale_image, get_human_player_input
 import math
 import pygame
-import time
 
 CAR = scale_image(pygame.image.load("img/purple-car.png"), 0.6)
 CAR_WIDTH = CAR.get_width()
@@ -98,69 +97,59 @@ class Car(ABC):
         pygame.draw.circle(window, (255, 0, 0), (self.x, self.y), 5)
 
 
-def draw(window, images, car):
-    window.fill((12, 145, 18))
+class Game:
+    def __init__(self):
+        self.car_acceleration = 0.7
+        self.car_deceleration = 0.2
+        self.car_brake_power = 0.5
+        self.car_max_velocity = 10
+        self.car_rotation_velocity = 3.7
+        self.car_start_angle = 180
+        self.car_start_position = (100, 0)
 
-    for image, position in images:
-        window.blit(image, position)
+    def initialise_car(self):
+        return Car(self.car_acceleration,
+                   self.car_deceleration,
+                   self.car_brake_power,
+                   self.car_max_velocity,
+                   self.car_rotation_velocity,
+                   self.car_start_angle,
+                   self.car_start_position)
 
-    car.draw(window)
-    pygame.display.update()
+    def draw(self, window, images, car):
+        window.fill((12, 145, 18))
 
+        for image, position in images:
+            window.blit(image, position)
 
-def main():
-    running = True
-    clock = pygame.time.Clock()
+        car.draw(window)
+        pygame.display.update()
 
-    acceleration = 0.3
-    deceleration = 0.1
-    brake_power = 0.5
-    max_velocity = 6
-    rotation_velocity = 4
-    start_angle = 180
-    start_position = (100, 0)
-    player = Car(acceleration, deceleration, brake_power, max_velocity, rotation_velocity, start_angle, start_position)
+    def human_player_game_loop(self):
+        running = True
+        clock = pygame.time.Clock()
 
-    images = [(TRACK, (0, 0))]
+        player = self.initialise_car()
 
-    while running:
-        clock.tick(FPS)
+        images = [(TRACK, (0, 0))]
 
-        draw(WINDOW, images, player)
+        while running:
+            clock.tick(FPS)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                break
+            self.draw(WINDOW, images, player)
 
-        keys = pygame.key.get_pressed()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    break
 
-        action = namedtuple("Action", ("throttle", "brake", "left", "right"))
+            action = get_human_player_input()
 
-        if key_up(keys):
-            action.throttle = True
-        else:
-            action.throttle = False
+            player.move_player(action)
 
-        if key_down(keys):
-            action.brake = True
-        else:
-            action.brake = False
-
-        if key_left(keys):
-            action.left = True
-        else:
-            action.left = False
-
-        if key_right(keys):
-            action.right = True
-        else:
-            action.right = False
-
-        player.move_player(action)
-
-    pygame.quit()
+        pygame.quit()
 
 
 if __name__ == '__main__':
-    main()
+    game = Game()
+    game.human_player_game_loop()

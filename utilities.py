@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 import pygame
 
 
@@ -25,6 +27,10 @@ def rotate_image(image, position, origin_position, angle):
     return rotated_image, rotated_image_rect
 
 
+def create_action():
+    return namedtuple("Action", ("throttle", "brake", "left", "right"))
+
+
 def key_left(keys) -> bool:
     return keys[pygame.K_LEFT] or keys[pygame.K_a]
 
@@ -39,3 +45,25 @@ def key_up(keys) -> bool:
 
 def key_down(keys) -> bool:
     return keys[pygame.K_DOWN] or keys[pygame.K_s] or keys[pygame.K_SPACE]
+
+
+def get_human_player_input():
+    action = create_action()
+    keys = pygame.key.get_pressed()
+    if key_up(keys):
+        action.throttle = 1
+    else:
+        action.throttle = 0
+    if key_down(keys):
+        action.brake = 1
+    else:
+        action.brake = 0
+    if key_left(keys):
+        action.left = 1
+    else:
+        action.left = 0
+    if key_right(keys):
+        action.right = 1
+    else:
+        action.right = 0
+    return action
