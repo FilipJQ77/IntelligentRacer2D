@@ -16,12 +16,11 @@ class Agent:
 
     @staticmethod
     def get_state(game: Game):
-        car_x = game.player.x
-        car_y = game.player.y
-        car_angle = game.player.angle
+        car_x = game.player_car.x
+        car_y = game.player_car.y
+        car_angle = game.player_car.angle
         """
         (x, y, angle) - car
-        (acceleration, deceleration, brake power, max velocity, rotation velocity) - car parameters
+        (acceleration, deceleration, brake power, max velocity, max rotation velocity) - car parameters
         (left: (x, y), right: (x, y)) - checkpoint - 3 next checkpoints to cross
         """
-        pass

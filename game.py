@@ -19,36 +19,42 @@ WIDTH = TRACK.get_width()
 HEIGHT = TRACK.get_height()
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 
+MOUSE_BUTTON_LEFT = 1
+COLOR_RED = pygame.color.Color(255, 0, 0)
+
 
 class Car(ABC):
-    def __init__(self, acceleration, deceleration, brake_power, max_velocity, rotation_speed, start_angle=0,
+    def __init__(self, acceleration, deceleration, brake_power, max_speed, max_rotation_speed, start_angle=0,
                  start_position=(0, 0)):
         self.acceleration = acceleration
         self.brake_power = brake_power
         self.deceleration = deceleration
-        self.max_velocity = max_velocity
-        self.velocity = 0
-        self.rotation_speed = rotation_speed
+        self.speed = 0
+        self.max_speed = max_speed
+        self.max_rotation_speed = max_rotation_speed
         self.angle = start_angle
         self.x, self.y = start_position
         self.image = CAR
         self.image_rect = self.image.get_rect()
 
     def rotate(self, left=False, right=False):
-        if self.velocity > 0:
+        if self.speed > 0:
+            # the faster you go, the less you can steer
+            # TODO a bit more turning ability at higher speed
+            rotation_speed = (-self.max_rotation_speed * self.speed) / (2 * self.max_speed) + self.max_rotation_speed
             if left:
-                self.angle += self.rotation_speed
+                self.angle += rotation_speed
             elif right:
-                self.angle -= self.rotation_speed
+                self.angle -= rotation_speed
 
     def accelerate(self):
-        self.velocity = min(self.velocity + self.acceleration, self.max_velocity)
+        self.speed = min(self.speed + self.acceleration, self.max_speed)
 
     def decelerate(self):
-        self.velocity = max(self.velocity - self.deceleration, 0)
+        self.speed = max(self.speed - self.deceleration, 0)
 
     def brake(self):
-        self.velocity = max(self.velocity - self.brake_power, 0)
+        self.speed = max(self.speed - self.brake_power, 0)
 
     def collide(self, mask, x, y):
         car_mask = pygame.mask.from_surface(self.image)
@@ -63,8 +69,8 @@ class Car(ABC):
 
     def move(self):
         angle = math.radians(self.angle)
-        vertical_velocity = math.cos(angle) * self.velocity
-        horizontal_velocity = math.sin(angle) * self.velocity
+        vertical_velocity = math.cos(angle) * self.speed
+        horizontal_velocity = math.sin(angle) * self.speed
 
         self.x -= horizontal_velocity
         self.y -= vertical_velocity
@@ -105,8 +111,13 @@ class Game:
         self.car_rotation_velocity = 3.7
         self.car_start_angle = 180
         self.car_start_position = (100, 0)
-        self.player = self.initialise_car()
+        self.player_car = self.initialise_car()
         self.images = [(TRACK, (0, 0))]
+        self.checkpoints = [
+            ((100, 100), (200, 200)),
+            ((300, 300), (400, 400)),
+        ]
+        self.new_checkpoint = None
 
     def initialise_car(self):
         return Car(self.car_acceleration,
@@ -123,7 +134,16 @@ class Game:
         for image, position in self.images:
             self.window.blit(image, position)
 
-        self.player.draw(self.window)
+        for checkpoint in self.checkpoints:
+            first_point = checkpoint[0]
+            second_point = checkpoint[1]
+            color = pygame.time.get_ticks() % 255
+            pygame.draw.line(self.window, (color, color, color), first_point, second_point, 5)
+
+        if self.new_checkpoint is not None:
+            pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint, pygame.mouse.get_pos(), 5)
+
+        self.player_car.draw(self.window)
 
         pygame.display.update()
 
@@ -140,12 +160,21 @@ class Game:
                 if event.type == pygame.QUIT:
                     running = False
                     break
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
+                    self.new_checkpoint = pygame.mouse.get_pos()
+                elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
+                    self.checkpoints.append((self.new_checkpoint, pygame.mouse.get_pos()))
+                    self.new_checkpoint = None
 
             action = get_human_player_input()
 
-            self.player.move_player(action)
+            self.player_car.move_player(action)
 
         pygame.quit()
+
+    @staticmethod
+    def create_checkpoints():
+        pass
 
 
 if __name__ == '__main__':
