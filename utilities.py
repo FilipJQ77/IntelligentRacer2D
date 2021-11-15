@@ -50,6 +50,7 @@ def key_down(keys) -> bool:
 def get_human_player_input():
     action = create_action_tuple()
     keys = pygame.key.get_pressed()
+
     if key_up(keys):
         action.throttle = 1
     else:
@@ -66,4 +67,5 @@ def get_human_player_input():
         action.right = 1
     else:
         action.right = 0
+
     return action

@@ -59,7 +59,7 @@ class Car(ABC):
     def collide(self, mask, x, y):
         car_mask = pygame.mask.from_surface(self.image)
         offset_x, offset_y, _, _ = self.image_rect
-        offset = (offset_x, offset_y)
+        offset = (offset_x - x, offset_y - y)
         intersection_point = mask.overlap(car_mask, offset)
         return intersection_point
 
@@ -107,24 +107,22 @@ class Game:
         self.car_acceleration = 0.7
         self.car_deceleration = 0.2
         self.car_brake_power = 0.5
-        self.car_max_velocity = 10
-        self.car_rotation_velocity = 3.7
+        self.car_max_speed = 10
+        self.car_max_rotation_speed = 6
         self.car_start_angle = 180
         self.car_start_position = (100, 0)
         self.player_car = self.initialise_car()
         self.images = [(TRACK, (0, 0))]
-        self.checkpoints = [
-            ((100, 100), (200, 200)),
-            ((300, 300), (400, 400)),
-        ]
+        self.checkpoints = [((0, 0), (0, 0))]
         self.new_checkpoint = None
+        self.checkpoint_index = 0
 
     def initialise_car(self):
         return Car(self.car_acceleration,
                    self.car_deceleration,
                    self.car_brake_power,
-                   self.car_max_velocity,
-                   self.car_rotation_velocity,
+                   self.car_max_speed,
+                   self.car_max_rotation_speed,
                    self.car_start_angle,
                    self.car_start_position)
 
@@ -137,8 +135,8 @@ class Game:
         for checkpoint in self.checkpoints:
             first_point = checkpoint[0]
             second_point = checkpoint[1]
-            color = pygame.time.get_ticks() % 255
-            pygame.draw.line(self.window, (color, color, color), first_point, second_point, 5)
+            color = (pygame.time.get_ticks() // 2) % 255
+            pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
 
         if self.new_checkpoint is not None:
             pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint, pygame.mouse.get_pos(), 5)
