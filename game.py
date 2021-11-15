@@ -104,18 +104,24 @@ class Car(ABC):
 class Game:
     def __init__(self):
         self.window = WINDOW
+        self.running = True
+        self.clock = pygame.time.Clock()
+
         self.car_acceleration = 0.7
         self.car_deceleration = 0.2
         self.car_brake_power = 0.5
         self.car_max_speed = 10
         self.car_max_rotation_speed = 6
+
         self.car_start_angle = 180
         self.car_start_position = (100, 0)
         self.player_car = self.initialise_car()
+
         self.images = [(TRACK, (0, 0))]
         self.checkpoints = [((0, 0), (0, 0))]
         self.new_checkpoint = None
         self.checkpoint_index = 0
+        self.creating_checkpoints = True
 
     def initialise_car(self):
         return Car(self.car_acceleration,
@@ -145,24 +151,25 @@ class Game:
 
         pygame.display.update()
 
-    def human_player_game_loop(self):
-        running = True
-        clock = pygame.time.Clock()
-
-        while running:
-            clock.tick(FPS)
-
-            self.draw()
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                    break
-                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                break
+            if self.creating_checkpoints:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
                     self.new_checkpoint = pygame.mouse.get_pos()
                 elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
                     self.checkpoints.append((self.new_checkpoint, pygame.mouse.get_pos()))
                     self.new_checkpoint = None
+
+    def human_player_game_loop(self):
+        while self.running:
+            self.clock.tick(FPS)  # todo move car with delta time?
+
+            self.draw()
+
+            self.handle_events()
 
             action = get_human_player_input()
 
