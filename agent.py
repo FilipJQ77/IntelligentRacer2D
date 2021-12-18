@@ -21,8 +21,8 @@ class Agent:
         # next 3 checkpoints
         len_checkpoints = len(game.checkpoints)
         checkpoint_1 = game.checkpoints[game.checkpoint_index % len_checkpoints]
-        checkpoint_2 = game.checkpoints[game.checkpoint_index + 1 % len_checkpoints]
-        checkpoint_3 = game.checkpoints[game.checkpoint_index + 2 % len_checkpoints]
+        checkpoint_2 = game.checkpoints[(game.checkpoint_index + 1) % len_checkpoints]
+        checkpoint_3 = game.checkpoints[(game.checkpoint_index + 2) % len_checkpoints]
 
         state = [
             # current car state

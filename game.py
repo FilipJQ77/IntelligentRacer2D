@@ -1,6 +1,9 @@
 from abc import ABC
 from collections import namedtuple
-from utilities import rotate_image, scale_image, get_human_player_input
+
+import utilities
+from utilities import distance_from_point_and_line, rotate_image, scale_image, get_human_player_input
+import json
 import math
 import pygame
 
@@ -8,9 +11,7 @@ CAR = scale_image(pygame.image.load("img/purple-car.png"), 0.6)
 CAR_WIDTH = CAR.get_width()
 CAR_HEIGHT = CAR.get_height()
 TRACK = pygame.image.load("img/track.png")
-# TRACK = pygame.image.load("img/track2.png")
 TRACK_BORDER = pygame.image.load("img/track_border.png")
-# TRACK_BORDER = pygame.image.load("img/track2_border.png")
 TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 pygame.display.set_caption("Racer 2D")
 
@@ -96,9 +97,16 @@ class Car(ABC):
         if self.collide(TRACK_BORDER_MASK, 0, 0):
             self.bounce()
 
+    def check_checkpoint_pass(self, checkpoint):
+        distance = distance_from_point_and_line(checkpoint[0], checkpoint[1], (self.x, self.y))
+        if distance < CAR_WIDTH:
+            return True
+        else:
+            return False
+
     def draw(self, window):
         window.blit(self.image, self.image_rect)
-        pygame.draw.circle(window, (255, 0, 0), (self.x, self.y), 5)
+        # pygame.draw.circle(window, (255, 0, 0), (self.x, self.y), 5)
 
 
 class Game:
@@ -118,10 +126,11 @@ class Game:
         self.player_car = self.initialise_car()
 
         self.images = [(TRACK, (0, 0))]
-        self.checkpoints = [((0, 0), (0, 0))]
-        self.new_checkpoint = None
+        self.checkpoints = []
+        self.new_checkpoint_left_point = None
         self.checkpoint_index = 0
         self.creating_checkpoints = True
+        self.showing_checkpoints = True
 
     def initialise_car(self):
         return Car(self.car_acceleration,
@@ -138,14 +147,29 @@ class Game:
         for image, position in self.images:
             self.window.blit(image, position)
 
-        for checkpoint in self.checkpoints:
-            first_point = checkpoint[0]
-            second_point = checkpoint[1]
-            color = (pygame.time.get_ticks() // 2) % 255
-            pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
+        ticks = pygame.time.get_ticks()
 
-        if self.new_checkpoint is not None:
-            pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint, pygame.mouse.get_pos(), 5)
+        if self.showing_checkpoints:
+            if self.creating_checkpoints:
+                for checkpoint in self.checkpoints:
+                    first_point = checkpoint[0]
+                    second_point = checkpoint[1]
+                    color = (ticks // 2) % 255
+                    pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
+
+                if self.new_checkpoint_left_point is not None:
+                    pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint_left_point, pygame.mouse.get_pos(), 5)
+            else:
+                # get next 3 checkpoints
+                len_checkpoints = len(self.checkpoints) - 1
+                current_checkpoint = self.checkpoints[self.checkpoint_index]
+                next_checkpoint = self.checkpoints[(self.checkpoint_index + 1) % len_checkpoints]
+                next_next_checkpoint = self.checkpoints[(self.checkpoint_index + 2) % len_checkpoints]
+
+                # draw checkpoint lines
+                pygame.draw.line(self.window, COLOR_RED, current_checkpoint[0], current_checkpoint[1], 5)
+                pygame.draw.line(self.window, COLOR_RED, next_checkpoint[0], next_checkpoint[1], 5)
+                pygame.draw.line(self.window, COLOR_RED, next_next_checkpoint[0], next_next_checkpoint[1], 5)
 
         self.player_car.draw(self.window)
 
@@ -156,12 +180,46 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
                 break
+
             if self.creating_checkpoints:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
-                    self.new_checkpoint = pygame.mouse.get_pos()
-                elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
-                    self.checkpoints.append((self.new_checkpoint, pygame.mouse.get_pos()))
-                    self.new_checkpoint = None
+                self.create_new_checkpoint(event)
+
+            keys = pygame.key.get_pressed()
+
+            if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
+                ctrl = True
+            else:
+                ctrl = False
+
+            if ctrl:
+                if keys[pygame.K_s]:
+                    self.save_checkpoints()
+                elif keys[pygame.K_l]:
+                    self.load_checkpoints()
+                elif keys[pygame.K_c]:
+                    self.showing_checkpoints = not self.showing_checkpoints
+
+    def create_new_checkpoint(self, event: pygame.event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
+            self.new_checkpoint_left_point = pygame.mouse.get_pos()
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
+            self.checkpoints.append((self.new_checkpoint_left_point, pygame.mouse.get_pos()))
+            self.new_checkpoint_left_point = None
+
+    def save_checkpoints(self):
+        with open("data/track_checkpoints.json", 'w') as file:
+            json.dump(self.checkpoints, file)
+        self.creating_checkpoints = False
+        self.showing_checkpoints = False
+
+    def load_checkpoints(self):
+        try:
+            with open("data/track_checkpoints.json", 'r') as file:
+                self.checkpoints = json.load(file)
+            self.creating_checkpoints = False
+            self.showing_checkpoints = False
+        except Exception as e:
+            print(e)
 
     def human_player_game_loop(self):
         while self.running:
@@ -171,15 +229,14 @@ class Game:
 
             self.handle_events()
 
-            action = get_human_player_input()
-
-            self.player_car.move_player(action)
+            if not self.creating_checkpoints:
+                action = get_human_player_input()
+                self.player_car.move_player(action)
+                checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_index])
+                if checkpoint_passed:
+                    self.checkpoint_index = (self.checkpoint_index + 1) % len(self.checkpoints)
 
         pygame.quit()
-
-    @staticmethod
-    def create_checkpoints():
-        pass
 
 
 if __name__ == '__main__':
