@@ -11,6 +11,13 @@ def scale_image(image, factor):
 
 # https://stackoverflow.com/a/54714144
 def rotate_image(image, position, origin_position, angle):
+    """
+    :param image:
+    :param position:
+    :param origin_position:
+    :param angle: angle in degrees
+    :return:
+    """
     # offset from pivot to center
     image_rect = image.get_rect(topleft=(position[0] - origin_position[0], position[1] - origin_position[1]))
     offset_center_to_pivot = pygame.math.Vector2(position) - image_rect.center

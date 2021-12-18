@@ -22,6 +22,7 @@ WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 
 MOUSE_BUTTON_LEFT = 1
 COLOR_RED = pygame.color.Color(255, 0, 0)
+COLOR_BLUE = pygame.color.Color(0, 0, 255)
 
 
 class Car(ABC):
@@ -57,16 +58,12 @@ class Car(ABC):
     def brake(self):
         self.speed = max(self.speed - self.brake_power, 0)
 
-    def collide(self, mask, x, y):
+    def collide(self, mask, x=0, y=0):
         car_mask = pygame.mask.from_surface(self.image)
         offset_x, offset_y, _, _ = self.image_rect
         offset = (offset_x - x, offset_y - y)
         intersection_point = mask.overlap(car_mask, offset)
         return intersection_point
-
-    def bounce(self):
-        # self.velocity = -self.velocity  # todo improve
-        print(f"Collide {pygame.time.get_ticks()}")
 
     def move(self):
         angle = math.radians(self.angle)
@@ -94,9 +91,6 @@ class Car(ABC):
         # get current car position with rotation after moving
         self.image, self.image_rect = rotate_image(CAR, (self.x, self.y), (CAR_WIDTH / 2, CAR_HEIGHT / 2), self.angle)
 
-        if self.collide(TRACK_BORDER_MASK, 0, 0):
-            self.bounce()
-
     def check_checkpoint_pass(self, checkpoint):
         distance = distance_from_point_and_line(checkpoint[0], checkpoint[1], (self.x, self.y))
         if distance < CAR_WIDTH:
@@ -121,14 +115,16 @@ class Game:
         self.car_max_speed = 10
         self.car_max_rotation_speed = 6
 
-        self.car_start_angle = 180
-        self.car_start_position = (100, 0)
-        self.player_car = self.initialise_car()
+        self.start_angle = 0
+        self.start_position = (0, 0)
+        self.player_car = None
 
         self.images = [(TRACK, (0, 0))]
         self.checkpoints = []
         self.new_checkpoint_left_point = None
         self.checkpoint_index = 0
+
+        self.creating_start = True
         self.creating_checkpoints = True
         self.showing_checkpoints = True
 
@@ -138,8 +134,8 @@ class Game:
                    self.car_brake_power,
                    self.car_max_speed,
                    self.car_max_rotation_speed,
-                   self.car_start_angle,
-                   self.car_start_position)
+                   self.start_angle,
+                   self.start_position)
 
     def draw(self):
         self.window.fill((12, 145, 18))
@@ -148,6 +144,15 @@ class Game:
             self.window.blit(image, position)
 
         ticks = pygame.time.get_ticks()
+
+        if self.creating_start and not self.creating_checkpoints:
+            first_point = self.start_position
+            second_point = (self.start_position[0], self.start_position[1] + 20)
+            vector = (second_point[0] - first_point[0], second_point[1] - first_point[1])
+            new_vector = pygame.math.Vector2.rotate(pygame.math.Vector2(vector), self.start_angle)
+            second_point = (first_point[0] + new_vector.x, first_point[1] + new_vector.y)
+            pygame.draw.circle(self.window, COLOR_BLUE, first_point, 5)
+            pygame.draw.line(self.window, COLOR_BLUE, first_point, second_point, 5)
 
         if self.showing_checkpoints:
             if self.creating_checkpoints:
@@ -166,12 +171,13 @@ class Game:
                 next_checkpoint = self.checkpoints[(self.checkpoint_index + 1) % len_checkpoints]
                 next_next_checkpoint = self.checkpoints[(self.checkpoint_index + 2) % len_checkpoints]
 
-                # draw checkpoint lines
+                # draw next checkpoints lines
                 pygame.draw.line(self.window, COLOR_RED, current_checkpoint[0], current_checkpoint[1], 5)
                 pygame.draw.line(self.window, COLOR_RED, next_checkpoint[0], next_checkpoint[1], 5)
                 pygame.draw.line(self.window, COLOR_RED, next_next_checkpoint[0], next_next_checkpoint[1], 5)
 
-        self.player_car.draw(self.window)
+        if not self.creating_start:
+            self.player_car.draw(self.window)
 
         pygame.display.update()
 
@@ -181,9 +187,6 @@ class Game:
                 self.running = False
                 break
 
-            if self.creating_checkpoints:
-                self.create_new_checkpoint(event)
-
             keys = pygame.key.get_pressed()
 
             if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
@@ -191,54 +194,110 @@ class Game:
             else:
                 ctrl = False
 
-            if ctrl:
-                if keys[pygame.K_s]:
-                    self.save_checkpoints()
-                elif keys[pygame.K_l]:
-                    self.load_checkpoints()
-                elif keys[pygame.K_c]:
-                    self.showing_checkpoints = not self.showing_checkpoints
+            if self.creating_checkpoints:
+                self.create_checkpoint(event)
+                if ctrl:
+                    checkpoints_done = False
+                    if keys[pygame.K_s]:
+                        self.save_checkpoints()
+                        checkpoints_done = True
+                    elif keys[pygame.K_l]:
+                        self.load_checkpoints()
+                        checkpoints_done = True
+                    if checkpoints_done:
+                        self.creating_checkpoints = False
+            else:
+                self.create_start_position(event)
+                if ctrl:
+                    start_done = False
+                    if keys[pygame.K_s]:
+                        self.save_start()
+                        start_done = True
+                    elif keys[pygame.K_l]:
+                        self.load_start()
+                        start_done = True
+                    if start_done:
+                        self.player_car = self.initialise_car()
+                        self.creating_start = False
 
-    def create_new_checkpoint(self, event: pygame.event):
+            if ctrl and keys[pygame.K_c]:
+                self.showing_checkpoints = not self.showing_checkpoints
+
+    def create_start_position(self, event: pygame.event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
+            self.start_position = pygame.mouse.get_pos()
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
+            point1 = self.start_position
+            point2 = pygame.mouse.get_pos()
+            # if the x coordinates are the same, we cant divide by zero
+            if point1[0] == point2[0]:
+                self.start_angle = 0
+            else:
+                self.start_angle = math.degrees(math.atan((point2[1] - point1[1]) / (point2[0] - point1[0])))
+
+    def create_checkpoint(self, event: pygame.event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == MOUSE_BUTTON_LEFT:
             self.new_checkpoint_left_point = pygame.mouse.get_pos()
         elif event.type == pygame.MOUSEBUTTONUP and event.button == MOUSE_BUTTON_LEFT:
             self.checkpoints.append((self.new_checkpoint_left_point, pygame.mouse.get_pos()))
             self.new_checkpoint_left_point = None
 
+    def save_start(self):
+        self.save_checkpoints()
+        with open("data/start.json", 'w') as file:
+            json.dump((self.start_position, self.start_angle), file)
+
     def save_checkpoints(self):
         with open("data/track_checkpoints.json", 'w') as file:
             json.dump(self.checkpoints, file)
-        self.creating_checkpoints = False
-        self.showing_checkpoints = False
+
+    def load_start(self):
+        self.load_checkpoints()
+        try:
+            with open("data/start.json", 'r') as file:
+                self.start_position, self.start_angle = json.load(file)
+        except Exception as e:
+            print(e)
 
     def load_checkpoints(self):
         try:
             with open("data/track_checkpoints.json", 'r') as file:
                 self.checkpoints = json.load(file)
-            self.creating_checkpoints = False
-            self.showing_checkpoints = False
         except Exception as e:
             print(e)
 
-    def human_player_game_loop(self):
+    def game_step(self, action):
+        self.clock.tick(FPS)  # todo move car with delta time?
+        self.draw()
+        self.handle_events()
+
+        reward = 0
+        game_over = False
+
+        if not self.creating_start:
+            self.player_car.move_player(action)
+
+            checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_index])
+            if checkpoint_passed:
+                self.checkpoint_index = (self.checkpoint_index + 1) % len(self.checkpoints)
+                reward = self.checkpoint_index * 10
+
+            if self.player_car.collide(TRACK_BORDER_MASK):
+                reward = -50
+                game_over = True
+
+        return reward, game_over
+
+    def game_loop(self):
         while self.running:
-            self.clock.tick(FPS)  # todo move car with delta time?
-
-            self.draw()
-
-            self.handle_events()
-
-            if not self.creating_checkpoints:
-                action = get_human_player_input()
-                self.player_car.move_player(action)
-                checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_index])
-                if checkpoint_passed:
-                    self.checkpoint_index = (self.checkpoint_index + 1) % len(self.checkpoints)
+            action = get_human_player_input()
+            _, game_over = self.game_step(action)
+            if game_over:
+                self.running = False
 
         pygame.quit()
 
 
 if __name__ == '__main__':
     game = Game()
-    game.human_player_game_loop()
+    game.game_loop()
