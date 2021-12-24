@@ -7,7 +7,7 @@ import json
 import math
 import pygame
 
-CAR = scale_image(pygame.image.load("img/purple-car.png"), 0.6)
+CAR = scale_image(pygame.image.load("img/purple-car.png"), 0.55)
 CAR_WIDTH = CAR.get_width()
 CAR_HEIGHT = CAR.get_height()
 TRACK = pygame.image.load("img/track.png")
@@ -122,7 +122,7 @@ class Game:
         self.images = [(TRACK, (0, 0))]
         self.checkpoints = []
         self.new_checkpoint_left_point = None
-        self.checkpoint_index = 0
+        self.checkpoint_counter = 0
 
         self.creating_start = True
         self.creating_checkpoints = True
@@ -145,7 +145,17 @@ class Game:
 
         ticks = pygame.time.get_ticks()
 
-        if self.creating_start and not self.creating_checkpoints:
+        if self.creating_checkpoints:
+            for checkpoint in self.checkpoints:
+                first_point = checkpoint[0]
+                second_point = checkpoint[1]
+                color = (ticks // 2) % 255
+                pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
+
+            if self.new_checkpoint_left_point is not None:
+                pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint_left_point, pygame.mouse.get_pos(), 5)
+
+        elif self.creating_start:
             first_point = self.start_position
             second_point = (self.start_position[0], self.start_position[1] + 20)
             vector = (second_point[0] - first_point[0], second_point[1] - first_point[1])
@@ -154,30 +164,19 @@ class Game:
             pygame.draw.circle(self.window, COLOR_BLUE, first_point, 5)
             pygame.draw.line(self.window, COLOR_BLUE, first_point, second_point, 5)
 
-        if self.showing_checkpoints:
-            if self.creating_checkpoints:
-                for checkpoint in self.checkpoints:
-                    first_point = checkpoint[0]
-                    second_point = checkpoint[1]
-                    color = (ticks // 2) % 255
-                    pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
-
-                if self.new_checkpoint_left_point is not None:
-                    pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint_left_point, pygame.mouse.get_pos(), 5)
-            else:
+        else:
+            self.player_car.draw(self.window)
+            if self.showing_checkpoints:
                 # get next 3 checkpoints
-                len_checkpoints = len(self.checkpoints) - 1
-                current_checkpoint = self.checkpoints[self.checkpoint_index]
-                next_checkpoint = self.checkpoints[(self.checkpoint_index + 1) % len_checkpoints]
-                next_next_checkpoint = self.checkpoints[(self.checkpoint_index + 2) % len_checkpoints]
+                len_checkpoints = len(self.checkpoints)
+                current_checkpoint = self.checkpoints[self.checkpoint_counter % len_checkpoints]
+                next_checkpoint = self.checkpoints[(self.checkpoint_counter + 1) % len_checkpoints]
+                next_next_checkpoint = self.checkpoints[(self.checkpoint_counter + 2) % len_checkpoints]
 
                 # draw next checkpoints lines
                 pygame.draw.line(self.window, COLOR_RED, current_checkpoint[0], current_checkpoint[1], 5)
                 pygame.draw.line(self.window, COLOR_RED, next_checkpoint[0], next_checkpoint[1], 5)
                 pygame.draw.line(self.window, COLOR_RED, next_next_checkpoint[0], next_next_checkpoint[1], 5)
-
-        if not self.creating_start:
-            self.player_car.draw(self.window)
 
         pygame.display.update()
 
@@ -242,14 +241,21 @@ class Game:
             self.checkpoints.append((self.new_checkpoint_left_point, pygame.mouse.get_pos()))
             self.new_checkpoint_left_point = None
 
+    def save_checkpoints(self):
+        with open("data/track_checkpoints.json", 'w') as file:
+            json.dump(self.checkpoints, file)
+
+    def load_checkpoints(self):
+        try:
+            with open("data/track_checkpoints.json", 'r') as file:
+                self.checkpoints = json.load(file)
+        except Exception as e:
+            print(e)
+
     def save_start(self):
         self.save_checkpoints()
         with open("data/start.json", 'w') as file:
             json.dump((self.start_position, self.start_angle), file)
-
-    def save_checkpoints(self):
-        with open("data/track_checkpoints.json", 'w') as file:
-            json.dump(self.checkpoints, file)
 
     def load_start(self):
         self.load_checkpoints()
@@ -259,14 +265,18 @@ class Game:
         except Exception as e:
             print(e)
 
-    def load_checkpoints(self):
-        try:
-            with open("data/track_checkpoints.json", 'r') as file:
-                self.checkpoints = json.load(file)
-        except Exception as e:
-            print(e)
+    def start(self):
+        self.load_checkpoints()
+        self.creating_checkpoints = False
+        self.load_start()
+        self.creating_start = False
+        self.player_car = self.initialise_car()
 
-    def game_step(self, action):
+    def restart(self):
+        self.player_car = self.initialise_car()
+        self.checkpoint_counter = 0
+
+    def step(self, action) -> (int, bool):
         self.clock.tick(FPS)  # todo move car with delta time?
         self.draw()
         self.handle_events()
@@ -277,13 +287,18 @@ class Game:
         if not self.creating_start:
             self.player_car.move_player(action)
 
-            checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_index])
+            if self.player_car.speed < self.car_max_speed / 10:
+                reward -= -10
+            else:
+                reward = 5
+
+            checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_counter])
             if checkpoint_passed:
-                self.checkpoint_index = (self.checkpoint_index + 1) % len(self.checkpoints)
-                reward = self.checkpoint_index * 10
+                self.checkpoint_counter += 1
+                reward = self.checkpoint_counter * 10
 
             if self.player_car.collide(TRACK_BORDER_MASK):
-                reward = -50
+                reward = -100
                 game_over = True
 
         return reward, game_over
@@ -291,9 +306,9 @@ class Game:
     def game_loop(self):
         while self.running:
             action = get_human_player_input()
-            _, game_over = self.game_step(action)
+            _, game_over = self.step(action)
             if game_over:
-                self.running = False
+                self.restart()
 
         pygame.quit()
 

@@ -50,6 +50,68 @@ def create_action_tuple():
     return namedtuple("Action", ("throttle", "brake", "left", "right"))
 
 
+def choose_action(index: int):
+    """
+    0 - nothing
+    1 - throttle
+    2 - brake
+    3 - left
+    4 - right
+    5 - throttle + brake
+    6 - throttle + left
+    7 - throttle + right
+    8 - brake + left
+    9 - brake + right
+    10 - throttle + brake + left
+    11 - throttle + brake + right
+    There are no left + right because it does not make sense to steer in both directions.
+    :param index: action index
+    :return: action
+    """
+    action = create_action_tuple()
+    throttle = 0
+    brake = 0
+    left = 0
+    right = 0
+    if index == 1:
+        throttle = 1
+    elif index == 2:
+        brake = 1
+    elif index == 3:
+        left = 1
+    elif index == 4:
+        right = 1
+    elif index == 5:
+        throttle = 1
+        brake = 1
+    elif index == 6:
+        throttle = 1
+        left = 1
+    elif index == 7:
+        throttle = 1
+        right = 1
+    elif index == 8:
+        brake = 1
+        left = 1
+    elif index == 9:
+        brake = 1
+        right = 1
+    elif index == 10:
+        throttle = 1
+        brake = 1
+        left = 1
+    elif index == 11:
+        throttle = 1
+        brake = 1
+        right = 1
+
+    action.throttle = throttle
+    action.brake = brake
+    action.left = left
+    action.right = right
+    return action
+
+
 def key_left(keys) -> bool:
     return keys[pygame.K_LEFT] or keys[pygame.K_a]
 
