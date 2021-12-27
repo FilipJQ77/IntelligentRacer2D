@@ -91,8 +91,10 @@ class Car(ABC):
         # get current car position with rotation after moving
         self.image, self.image_rect = rotate_image(CAR, (self.x, self.y), (CAR_WIDTH / 2, CAR_HEIGHT / 2), self.angle)
 
-    def check_checkpoint_pass(self, checkpoint):
-        distance = distance_from_point_and_line(checkpoint[0], checkpoint[1], (self.x, self.y))
+    def get_distance_from_checkpoint(self, checkpoint):
+        return distance_from_point_and_line(checkpoint[0], checkpoint[1], (self.x, self.y))
+
+    def check_checkpoint_pass(self, distance):
         if distance < CAR_WIDTH:
             return True
         else:
@@ -123,6 +125,7 @@ class Game:
         self.checkpoints = []
         self.new_checkpoint_left_point = None
         self.checkpoint_counter = 0
+        self.checkpoint_distance = None
 
         self.creating_start = True
         self.creating_checkpoints = True
@@ -136,6 +139,10 @@ class Game:
                    self.car_max_rotation_speed,
                    self.start_angle,
                    self.start_position)
+
+    def get_distance_from_checkpoint(self):
+        return self.player_car.get_distance_from_checkpoint(
+            self.checkpoints[self.checkpoint_counter % len(self.checkpoints)])
 
     def draw(self):
         self.window.fill((12, 145, 18))
@@ -271,9 +278,11 @@ class Game:
         self.load_start()
         self.creating_start = False
         self.player_car = self.initialise_car()
+        self.checkpoint_distance = self.get_distance_from_checkpoint()
 
     def restart(self):
         self.player_car = self.initialise_car()
+        self.checkpoint_distance = self.get_distance_from_checkpoint()
         self.checkpoint_counter = 0
 
     def step(self, action) -> (int, bool):
@@ -288,17 +297,19 @@ class Game:
             self.player_car.move_player(action)
 
             if self.player_car.speed < self.car_max_speed / 10:
-                reward -= -10
-            else:
-                reward = 5
+                reward = -10
 
-            checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoints[self.checkpoint_counter])
+            new_checkpoint_distance = self.get_distance_from_checkpoint()
+            reward += self.checkpoint_distance - new_checkpoint_distance
+            self.checkpoint_distance = new_checkpoint_distance
+
+            checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoint_distance)
             if checkpoint_passed:
                 self.checkpoint_counter += 1
-                reward = self.checkpoint_counter * 10
+                reward *= 2
 
             if self.player_car.collide(TRACK_BORDER_MASK):
-                reward = -100
+                reward = -10
                 game_over = True
 
         return reward, game_over
