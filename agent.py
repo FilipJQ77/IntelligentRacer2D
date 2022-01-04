@@ -8,7 +8,7 @@ from model import LinearQNet
 from trainer import QTrainer
 from utilities import choose_action
 
-from game import Game
+from drive import Game
 
 GAMES_IN_MEMORY = 100
 GAME_MEMORY = 1000
@@ -89,7 +89,7 @@ class Agent:
 
 
 def main():
-    epsilon = 1
+    epsilon = 1.5
     learning_rate = 0.1
     gamma = 0.9
     model = LinearQNet(8, 100, NUMBER_OF_ACTIONS)

@@ -33,7 +33,7 @@ class QTrainer:
         for i in range(len(states_tensor)):
             new_q = rewards_tensor[i]
             if not game_overs[i]:
-                new_q = rewards_tensor[i] + self.gamma * torch.max(self.model(next_states_tensor[i]))
+                new_q = rewards_tensor[i]  # + self.gamma * torch.max(self.model(next_states_tensor[i]))
 
             target[i][torch.argmax(actions_tensor[i])] = new_q
 

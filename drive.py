@@ -1,38 +1,26 @@
-import pygame_widgets
-
-from utilities import scale_image, get_human_player_input
 import json
 import math
 import pygame
-import pygame.font
-from pygame_widgets.button import Button
 
-from enum import Enum
-
-CAR = scale_image(pygame.image.load("img/car.png"), 0.6)
-
-CAR_WIDTH = CAR.get_width()
-CAR_HEIGHT = CAR.get_height()
-TRACK = pygame.image.load("img/track.png")
-TRACK_BORDER = pygame.image.load("img/track_border.png")
-TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
-pygame.display.set_caption("Racer 2D")
-
-FPS = 60
-WIDTH = TRACK.get_width()
-HEIGHT = TRACK.get_height()
-WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
+from car import Car
+from utilities import get_human_player_input
 
 MOUSE_BUTTON_LEFT = 1
 COLOR_RED = pygame.color.Color(255, 0, 0)
 COLOR_BLUE = pygame.color.Color(0, 0, 255)
 
 
-class OldGame:
-    def __init__(self):
-        self.window = WINDOW
+class Drive:
+    def __init__(self, window: pygame.display, track_image: pygame.image, track_border_image: pygame.image):
+        self.window = window
         self.running = True
         self.clock = pygame.time.Clock()
+
+        self.track = track_image
+        self.track_border = track_border_image
+        self.self.track_border_mask = pygame.mask.from_surface(self.track_border)
+        self.track_width = track_image.get_width()
+        self.track_height = track_image.get_height()
 
         self.car_acceleration = 0.7
         self.car_deceleration = 0.2
@@ -42,25 +30,25 @@ class OldGame:
 
         self.start_angle = 0
         self.start_position = (0, 0)
-        self.player_car = None
+        self.player_car = self.initialise_car()
 
-        self.images = [(TRACK, (0, 0))]
+        self.images = [(self.track, (0, 0))]
         self.checkpoints = []
         self.new_checkpoint_left_point = None
+        self.checkpoint_counter = 0
 
         self.creating_start = True
         self.creating_checkpoints = True
         self.showing_checkpoints = True
 
     def initialise_car(self):
-        return None
-        # return Car(self.car_acceleration,
-        #            self.car_deceleration,
-        #            self.car_brake_power,
-        #            self.car_max_speed,
-        #            self.car_max_angle,
-        #            self.start_angle,
-        #            self.start_position)
+        return Car(self.car_acceleration,
+                   self.car_deceleration,
+                   self.car_brake_power,
+                   self.car_max_speed,
+                   self.car_max_angle,
+                   self.start_angle,
+                   self.start_position)
 
     def get_distance_from_checkpoint(self):
         return self.player_car.get_distance_from_checkpoint(
@@ -208,7 +196,7 @@ class OldGame:
         self.checkpoint_counter = 0
 
     def step(self, action) -> (int, bool):
-        self.clock.tick(FPS)  # todo move car with delta time?
+        self.clock.tick(60)  # todo move car with delta time?
         self.draw()
         self.handle_events()
 
@@ -223,14 +211,13 @@ class OldGame:
 
             new_checkpoint_distance = self.get_distance_from_checkpoint()
             reward += self.checkpoint_distance - new_checkpoint_distance
-            self.checkpoint_distance = new_checkpoint_distance
 
             checkpoint_passed = self.player_car.check_checkpoint_pass(self.checkpoint_distance)
             if checkpoint_passed:
                 self.checkpoint_counter += 1
                 reward *= 2
 
-            if self.player_car.collide(TRACK_BORDER_MASK):
+            if self.player_car.collide(self.track_border_mask):
                 reward = -10
                 game_over = True
 
@@ -246,56 +233,6 @@ class OldGame:
         pygame.quit()
 
 
-class GameState(Enum):
-    MAIN_MENU = 1
-    HUMAN_GAME = 2
-    TRAINING = 3
-    BEST_PLAYER = 4
-
-
-class Game:
-    def __init__(self):
-        pygame.init()
-        self.window = WINDOW
-        self.running = True
-        self.state = GameState.MAIN_MENU
-        self.button = Button(
-            # Mandatory Parameters
-            WINDOW,  # Surface to place button on
-            100,  # X-coordinate of top left corner
-            100,  # Y-coordinate of top left corner
-            300,  # Width
-            150,  # Height
-
-            # Optional Parameters
-            text='Hello',  # Text to display
-            fontSize=50,  # Size of font
-            margin=20,  # Minimum distance between text/image and edge of button
-            inactiveColour=(200, 50, 0),  # Colour of button when not being interacted with
-            hoverColour=(150, 0, 0),  # Colour of button when being hovered over
-            pressedColour=(0, 200, 20),  # Colour of button when being clicked
-            radius=20,  # Radius of border corners (leave empty for not curved)
-            onClick=lambda: print('Click'),  # Function to call when clicked on
-        )
-
-    def draw(self):
-        if self.state == GameState.MAIN_MENU:
-            events = pygame.event.get()
-            pygame_widgets.update(events)
-        elif self.state == GameState.HUMAN_GAME:
-            pass
-        elif self.state == GameState.TRAINING:
-            pass
-        elif self.state == GameState.BEST_PLAYER:
-            pass
-
-    def main(self):
-        while self.running:
-            self.window.fill((255, 255, 255))
-            self.draw()
-            pygame.display.update()
-
-
 if __name__ == '__main__':
-    game = Game()
-    game.main()
+    game = Drive()
+    game.game_loop()
