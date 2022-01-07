@@ -1,27 +1,27 @@
-import pygame_widgets
-
-from utilities import scale_image, get_human_player_input
 import json
 import math
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
+
 import pygame
-import pygame.font
-from pygame_widgets.button import Button
+import pygame_menu
 
-from enum import Enum
+from drive import Drive
+from utilities import scale_image, get_human_player_input
 
-CAR = scale_image(pygame.image.load("img/car.png"), 0.6)
-
+CAR = scale_image(pygame.image.load("data/car.png"), 0.6)
 CAR_WIDTH = CAR.get_width()
 CAR_HEIGHT = CAR.get_height()
-TRACK = pygame.image.load("img/track.png")
-TRACK_BORDER = pygame.image.load("img/track_border.png")
+TRACK = pygame.image.load("data/track1/track.png")
+TRACK_BORDER = pygame.image.load("data/track1/track_border.png")
+CHECKPOINTS = json.load(open("data/track1/track_checkpoints.json"))
+START_POSITION, START_ANGLE = json.load(open("data/track1/start.json"))
 TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 pygame.display.set_caption("Racer 2D")
 
 FPS = 60
 WIDTH = TRACK.get_width()
 HEIGHT = TRACK.get_height()
-WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 
 MOUSE_BUTTON_LEFT = 1
 COLOR_RED = pygame.color.Color(255, 0, 0)
@@ -30,7 +30,7 @@ COLOR_BLUE = pygame.color.Color(0, 0, 255)
 
 class OldGame:
     def __init__(self):
-        self.window = WINDOW
+        self.window = 420
         self.running = True
         self.clock = pygame.time.Clock()
 
@@ -171,25 +171,25 @@ class OldGame:
             self.new_checkpoint_left_point = None
 
     def save_checkpoints(self):
-        with open("data/track_checkpoints.json", 'w') as file:
+        with open("data/track1/track_checkpoints.json", 'w') as file:
             json.dump(self.checkpoints, file)
 
     def load_checkpoints(self):
         try:
-            with open("data/track_checkpoints.json", 'r') as file:
+            with open("data/track1/track_checkpoints.json", 'r') as file:
                 self.checkpoints = json.load(file)
         except Exception as e:
             print(e)
 
     def save_start(self):
         self.save_checkpoints()
-        with open("data/start.json", 'w') as file:
+        with open("data/track1/start.json", 'w') as file:
             json.dump((self.start_position, self.start_angle), file)
 
     def load_start(self):
         self.load_checkpoints()
         try:
-            with open("data/start.json", 'r') as file:
+            with open("data/track1/start.json", 'r') as file:
                 self.start_position, self.start_angle = json.load(file)
         except Exception as e:
             print(e)
@@ -208,7 +208,7 @@ class OldGame:
         self.checkpoint_counter = 0
 
     def step(self, action) -> (int, bool):
-        self.clock.tick(FPS)  # todo move car with delta time?
+        self.clock.tick(FPS)
         self.draw()
         self.handle_events()
 
@@ -246,54 +246,145 @@ class OldGame:
         pygame.quit()
 
 
-class GameState(Enum):
-    MAIN_MENU = 1
-    HUMAN_GAME = 2
-    TRAINING = 3
-    BEST_PLAYER = 4
+def get_filename_dialog():
+    Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
+    return askopenfilename()  # show an "Open" dialog box and return the path to the selected file
 
 
 class Game:
     def __init__(self):
         pygame.init()
-        self.window = WINDOW
+        # self.window = pygame.display.set_mode((WIDTH, HEIGHT))
+        # self.window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.window = pygame.display.set_mode((1600, 900))
         self.running = True
-        self.state = GameState.MAIN_MENU
-        self.button = Button(
-            # Mandatory Parameters
-            WINDOW,  # Surface to place button on
-            100,  # X-coordinate of top left corner
-            100,  # Y-coordinate of top left corner
-            300,  # Width
-            150,  # Height
+        self.track_image = TRACK  # default
+        self.track_image_path = None
+        self.track_border_image = TRACK_BORDER  # default
+        self.track_border_image_path = None
+        self.track_checkpoints = CHECKPOINTS  # default
+        self.track_checkpoints_path = None
+        self.track_start_position = START_POSITION  # default
+        self.track_start_angle = START_ANGLE  # default
+        self.track_start_path = None
+        self.main_menu = self._main_menu()
 
-            # Optional Parameters
-            text='Hello',  # Text to display
-            fontSize=50,  # Size of font
-            margin=20,  # Minimum distance between text/image and edge of button
-            inactiveColour=(200, 50, 0),  # Colour of button when not being interacted with
-            hoverColour=(150, 0, 0),  # Colour of button when being hovered over
-            pressedColour=(0, 200, 20),  # Colour of button when being clicked
-            radius=20,  # Radius of border corners (leave empty for not curved)
-            onClick=lambda: print('Click'),  # Function to call when clicked on
+    def _main_menu(self):
+        menu = pygame_menu.Menu(
+            title="Intelligent Racer 2D",
+            width=self.window.get_width(),
+            height=self.window.get_height(),
+            theme=pygame_menu.themes.THEME_BLUE,
         )
+        menu.add.button("Play", lambda: self.play())
+        menu.add.button("Train", self._train_menu())
+        menu.add.button("Create a track", lambda: print("Create"))
+        menu.add.button("Load a track",
+                        self._load_track_menu())
+        menu.add.button("Quit", lambda: self.quit())
+        return menu
+
+    def _train_menu(self):
+        train_menu = pygame_menu.Menu(
+            title="Training",
+            width=self.window.get_width(),
+            height=self.window.get_height(),
+            theme=pygame_menu.themes.THEME_BLUE
+        )
+        train_menu.add.button("Show best player or sth", lambda: print(""))
+        return train_menu
+
+    def _load_track_menu(self):
+        load_track_menu = pygame_menu.Menu(
+            title="Load a track",
+            width=self.window.get_width(),
+            height=self.window.get_height(),
+            theme=pygame_menu.themes.THEME_BLUE,
+            columns=2,
+            rows=5,
+        )
+        track_label = load_track_menu.add.label("")
+        track_label.update_font({"size": 14})
+        button = load_track_menu.add.button("Load track image (PNG)",
+                                            lambda: self.load_track(get_filename_dialog(), track_label))
+        button.update_font({"size": 14})
+
+        load_track_menu.add.label("")
+        track_checkpoints_label = load_track_menu.add.label("")
+        track_checkpoints_label.update_font({"size": 14})
+        button = load_track_menu.add.button("Load track checkpoints (JSON)",
+                                            lambda: self.load_track_checkpoints(get_filename_dialog(),
+                                                                                track_checkpoints_label))
+        button.update_font({"size": 14})
+
+        track_border_label = load_track_menu.add.label("")
+        track_border_label.update_font({"size": 14})
+        button = load_track_menu.add.button("Load track border image (PNG)",
+                                            lambda: self.load_track_border(get_filename_dialog(), track_border_label))
+        button.update_font({"size": 14})
+
+        load_track_menu.add.label("")
+        track_start_label = load_track_menu.add.label("")
+        track_start_label.update_font({"size": 14})
+        button = load_track_menu.add.button("Load track start position (JSON)",
+                                            lambda: self.load_track_start(get_filename_dialog(), track_start_label))
+        button.update_font({"size": 14})
+
+        return load_track_menu
+
+    def load_assets(self):
+        # todo play and train
+        print("Loaded assets")
+        try:
+            self.track_image = pygame.image.load(self.track_image_path)
+            self.track_border_image = pygame.image.load(self.track_border_image_path)
+            with open(self.track_checkpoints_path, 'r') as file:
+                self.track_checkpoints = json.load(file)
+            with open(self.track_start_path, 'r') as file:
+                self.track_start_position = json.load(file)
+        except Exception as e:
+            print(e)
+
+    def load_track(self, path, label):
+        self.track_image_path = path
+        label.set_title(self.track_image_path)
+
+    def load_track_border(self, path, label):
+        self.track_border_image_path = path
+        label.set_title(self.track_border_image_path)
+
+    def load_track_checkpoints(self, path, label):
+        self.track_checkpoints_path = path
+        label.set_title(self.track_checkpoints_path)
+
+    def load_track_start(self, path, label):
+        self.track_start_path = path
+        label.set_title(self.track_start_path)
+
+    def play(self):
+        self.load_assets()
+        self.main_menu.disable()
+        self.running = True
+        drive = Drive(self.window, self.track_image, self.track_border_image, CAR, self.track_start_position,
+                      self.track_start_angle, self.track_checkpoints, FPS)
+        while self.running:
+            action = get_human_player_input()
+            game_over, stop = drive.step(action)
+            if game_over:
+                drive.restart()
+            if stop:
+                self.running = False
+                self.main_menu.enable()
+
+    def quit(self):
+        self.main_menu.disable()
 
     def draw(self):
-        if self.state == GameState.MAIN_MENU:
-            events = pygame.event.get()
-            pygame_widgets.update(events)
-        elif self.state == GameState.HUMAN_GAME:
-            pass
-        elif self.state == GameState.TRAINING:
-            pass
-        elif self.state == GameState.BEST_PLAYER:
-            pass
+        pass
 
     def main(self):
-        while self.running:
-            self.window.fill((255, 255, 255))
-            self.draw()
-            pygame.display.update()
+        self.main_menu.mainloop(self.window)
+        pygame.quit()
 
 
 if __name__ == '__main__':
