@@ -1,19 +1,28 @@
 import math
-import pygame
 from collections import namedtuple
+
+import pygame
 
 from utilities import rotate_image, distance_from_point_and_line
 
 
-class Car:
-    def __init__(self, acceleration, deceleration, brake_power, max_speed, max_angle, car_image, start_angle=0,
-                 start_position=(0, 0)):
+class CarSpecification:
+    def __init__(self, acceleration, deceleration, brake_power, max_speed, max_angle):
         self.acceleration = acceleration
         self.brake_power = brake_power
         self.deceleration = deceleration
-        self.speed = 0
         self.max_speed = max_speed
         self.max_angle = max_angle
+
+
+class Car:
+    def __init__(self, car_specification: CarSpecification, car_image, start_angle=0, start_position=(0, 0)):
+        self.acceleration = car_specification.acceleration
+        self.brake_power = car_specification.brake_power
+        self.deceleration = car_specification.deceleration
+        self.max_speed = car_specification.max_speed
+        self.max_angle = car_specification.max_angle
+        self.speed = 0
         self.angle = start_angle
         self.x, self.y = start_position
         self.original_image = self.image = car_image
@@ -22,14 +31,13 @@ class Car:
         self.image_rect = self.image.get_rect()
 
     def rotate(self, left=False, right=False):
-        if self.speed > 0:
-            # the faster you go, the less you can steer
-            # TODO a bit more turning ability at higher speed
-            angle = (-self.max_angle * self.speed) / (2 * self.max_speed) + self.max_angle
-            if left:
-                self.angle += angle
-            elif right:
-                self.angle -= angle
+        # the faster you go, the less you can steer
+        angle = (-self.max_angle * self.speed) / (4 * self.max_speed) + self.max_angle
+        # angle = (-self.max_angle * self.speed) / (2 * self.max_speed) + self.max_angle
+        if left:
+            self.angle += angle
+        elif right:
+            self.angle -= angle
 
     def accelerate(self):
         self.speed = min(self.speed + self.acceleration, self.max_speed)
