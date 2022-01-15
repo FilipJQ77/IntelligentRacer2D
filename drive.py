@@ -1,3 +1,4 @@
+import numpy as np
 import pygame
 
 from car import Car, CarSpecification
@@ -38,6 +39,45 @@ class Drive:
         return self.player_car.get_distance_from_checkpoint(
             self.checkpoints[self.checkpoint_counter % len(self.checkpoints)])
 
+    def get_state(self):
+        # next 3 checkpoints
+        len_checkpoints = len(self.checkpoints)
+        checkpoint_1 = self.checkpoints[self.checkpoint_counter % len_checkpoints]
+        # checkpoint_2 = game.checkpoints[(game.checkpoint_counter + 1) % len_checkpoints]
+        # checkpoint_3 = game.checkpoints[(game.checkpoint_counter + 2) % len_checkpoints]
+
+        state = [
+            # current car state
+            self.player_car.x,
+            self.player_car.y,
+            self.player_car.angle,
+            self.player_car.speed,
+
+            # car specification
+            # game.car_acceleration,
+            # game.car_deceleration,
+            # game.car_brake_power,
+            # game.car_max_speed,
+            # game.car_max_rotation_speed,
+
+            checkpoint_1[0][0],  # left point x
+            checkpoint_1[0][1],  # left point y
+            checkpoint_1[1][0],  # right point x
+            checkpoint_1[1][1],  # right point y
+
+            # checkpoint_2[0][0],  # left point x
+            # checkpoint_2[0][1],  # left point y
+            # checkpoint_2[1][0],  # right point x
+            # checkpoint_2[1][1],  # right point y
+
+            # checkpoint_3[0][0],  # left point x
+            # checkpoint_3[0][1],  # left point y
+            # checkpoint_3[1][0],  # right point x
+            # checkpoint_3[1][1],  # right point y
+        ]
+
+        return np.array(state, dtype=np.float64)
+
     def draw(self):
         self.window.fill((12, 145, 18))
 
@@ -61,14 +101,9 @@ class Drive:
 
     def handle_events(self):
         stop = False
+        keys = pygame.key.get_pressed()
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                stop = True
-                break
-
-            keys = pygame.key.get_pressed()
-
-            if keys[pygame.K_ESCAPE]:
+            if event.type == pygame.QUIT or keys[pygame.K_ESCAPE]:
                 stop = True
                 break
 
