@@ -24,20 +24,22 @@ class Create:
 
         ticks = pygame.time.get_ticks()
 
-        if self.creating_checkpoints:
-            for checkpoint in self.checkpoints:
-                first_point = checkpoint[0]
-                second_point = checkpoint[1]
-                color = (ticks // 2) % 255
-                pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
+        for checkpoint in self.checkpoints:
+            first_point = checkpoint[0]
+            second_point = checkpoint[1]
+            color = (ticks // 2) % 255
+            pygame.draw.line(self.window, (color, 0, 0), first_point, second_point, 5)
 
+        if self.creating_checkpoints:
             if self.new_checkpoint_left_point is not None:
                 pygame.draw.line(self.window, COLOR_RED, self.new_checkpoint_left_point, pygame.mouse.get_pos(), 5)
 
-        else:  # creating start position
-            # fixme
+        else:  # creating start
             first_point = self.start_position
-            second_point = pygame.mouse.get_pos()
+            second_point = (self.start_position[0], self.start_position[1] + 20)
+            vector = (second_point[0] - first_point[0], second_point[1] - first_point[1])
+            new_vector = pygame.math.Vector2.rotate(pygame.math.Vector2(vector), self.start_angle)
+            second_point = (first_point[0] + new_vector.x, first_point[1] + new_vector.y)
             pygame.draw.circle(self.window, COLOR_BLUE, first_point, 5)
             pygame.draw.line(self.window, COLOR_BLUE, first_point, second_point, 5)
 
@@ -55,6 +57,9 @@ class Create:
             if keys[pygame.K_ESCAPE]:
                 stop = True
                 break
+
+            if keys[pygame.K_z] and self.creating_checkpoints:
+                self.checkpoints.pop()
 
             if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
                 ctrl = True
@@ -92,5 +97,4 @@ class Create:
             if point1[0] == point2[0]:
                 self.start_angle = 0
             else:
-                # todo fix
-                self.start_angle = math.degrees(math.atan((point2[1] - point1[1]) / (point2[0] - point1[0])))
+                self.start_angle = math.degrees(math.atan2(point2[1] - point1[1], point2[0] - point1[0])) - 90

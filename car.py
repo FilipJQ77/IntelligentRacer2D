@@ -38,6 +38,7 @@ class Car:
             self.angle += angle
         elif right:
             self.angle -= angle
+        self.angle %= 360
 
     def accelerate(self):
         self.speed = min(self.speed + self.acceleration, self.max_speed)

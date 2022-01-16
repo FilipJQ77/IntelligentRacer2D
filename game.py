@@ -1,6 +1,7 @@
 import copy
 import json
 import random
+import statistics
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 
@@ -8,7 +9,8 @@ import pygame
 import pygame_menu
 import torch
 from pygad.torchga import torchga
-from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
+import numpy.random as npr
 
 from car import CarSpecification
 from create import Create
@@ -45,21 +47,22 @@ def generate_game_model():
 class Game:
     def __init__(self):
         pygame.init()
-        # self.window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         self.window = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.car_image = scale_image(pygame.image.load("data/car.png"), 0.5)
-        self.track_image_path = "data/track1/track.png"
+        self.track_image_path = "data/track3/track.png"
         self.track_image = pygame.image.load(self.track_image_path)  # default
-        self.track_border_image_path = "data/track1/track_border.png"
+        self.track_border_image_path = "data/track3/track_border.png"
         self.track_border_image = pygame.image.load(self.track_border_image_path)  # default
-        self.track_data_path = "data/track1/track_data.json"
+        self.track_data_path = "data/track3/track_data.json"
         self.checkpoints, self.start_position, self.start_angle = json.load(open(self.track_data_path))  # default
 
         self.generation = 0
         self.population_size = 50
         self.crossover_chance = 0.8
         self.mutation_chance = 0.01
+        self.mutation_percent_genes = 0.1
+        self.generation_time = 2000
         self.finish_time = pygame.time.get_ticks()
 
         self.population = None
@@ -97,20 +100,33 @@ class Game:
             theme=pygame_menu.themes.THEME_BLUE,
 
         )
-        train_menu.add.range_slider("Population size", self.population_size, [i for i in range(10, 201, 2)],
-                                    onchange=self.change_generation_size)
+        train_menu.add.range_slider("Population size", self.population_size, [i for i in range(10, 501, 2)],
+                                    onchange=self.change_generation_size, range_text_value_enabled=False)
         train_menu.add.range_slider("Crossover chance", self.crossover_chance, (0, 1), increment=0.01,
                                     onchange=self.change_crossover_chance)
         train_menu.add.range_slider("Mutation chance", self.mutation_chance, (0, 0.25), increment=0.01,
                                     onchange=self.change_mutation_chance)
+        train_menu.add.range_slider("Average percent of genes to mutate", self.mutation_percent_genes, (0, 0.25),
+                                    increment=0.01, onchange=self.change_mutation_percent_genes)
+        train_menu.add.range_slider("Time for each generation [s]", 2, [i for i in range(0, 31)],
+                                    onchange=self.change_generation_time, range_text_value_enabled=False)
 
         generation_label = train_menu.add.label(f"Generation: {self.generation}")
+        mean_label = train_menu.add.label(f"Mean checkpoints: 0")
+        median_label = train_menu.add.label(f"Median checkpoints: 0")
+        best_label = train_menu.add.label(f"Best checkpoints: 0")
 
         train_menu.add.button("Create new random population", lambda: self.create_new_population())
-        train_menu.add.button("Train 1 generation", lambda: self.train_generations(1, generation_label))
-        train_menu.add.button("Train 10 generations", lambda: self.train_generations(10, generation_label))
-        train_menu.add.button("Train 100 generations", lambda: self.train_generations(100, generation_label))
-        train_menu.add.button("Show best player", lambda: self.play_ai(generate_game_model(), True))  # todo
+        train_menu.add.button("Train 1 generation",
+                              lambda: self.train_generations(1, generation_label, mean_label, median_label, best_label))
+        train_menu.add.button("Train 10 generations",
+                              lambda: self.train_generations(10, generation_label, mean_label, median_label,
+                                                             best_label))
+        train_menu.add.button("Train 100 generations",
+                              lambda: self.train_generations(100, generation_label, mean_label, median_label,
+                                                             best_label))
+        train_menu.add.button("Show best player", lambda: self.show_best_player())
+        # todo show best player and save model
 
         return train_menu
 
@@ -170,11 +186,10 @@ class Game:
 
         self.main_menu.enable()
 
-    # todo remove later probably
-    def play_ai(self, model, show):
+    def show_best_player(self):
+        model = self.get_best_player_from_population()[0]
         self.main_menu.disable()
-        if show:
-            self.window = pygame.display.set_mode((self.track_image.get_width(), self.track_image.get_height()))
+        self.window = pygame.display.set_mode((self.track_image.get_width(), self.track_image.get_height()))
 
         drive = Drive(self.window, self.track_image, self.track_border_image, self.car_image, self.car_specification,
                       self.checkpoints, self.start_position, self.start_angle)
@@ -199,9 +214,8 @@ class Game:
             else:
                 action.right = 0
 
-            if show:
-                drive.draw()
-                self.clock.tick(FPS)
+            drive.draw()
+            self.clock.tick(FPS)
             stop = drive.handle_events()
             game_over = drive.step(action)
 
@@ -210,37 +224,62 @@ class Game:
 
         print(f"Number of checkpoints: {drive.checkpoint_counter}")
 
-        if show:
-            self.window = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.window = pygame.display.set_mode((WIDTH, HEIGHT))
         self.main_menu.enable()
         return drive.checkpoint_counter
 
-    def train_generations(self, number_of_generations, generations_label):
-        self.main_menu.disable()
+    def get_best_player_from_population(self):
+        maxx, index = -1, -1
+        for i in range(len(self.population)):
+            if self.population[i][1] > maxx:
+                maxx = self.population[i][1]
+                index = i
+        return self.population[index]
+
+    def train_generations(self, number_of_generations, generations_label, mean_label, median_label, best_label):
+        # self.main_menu.disable()
         for _ in range(number_of_generations):
-            # start with 10s, increase by 0.5s, stop at 30s
-            self.finish_time = pygame.time.get_ticks() + min(10000 + self.generation * 500, 30000)
-            with Pool() as pool:
+            # start with 3s, increase by 0.5s, stop at 30s
+            self.finish_time = pygame.time.get_ticks() + self.generation_time
+            with ThreadPool() as pool:
                 # run every AI parallel
                 pool.map(self.train_ai, [i for i in range(len(self.population))])
+
             new_population = []
+            best_player = self.get_best_player_from_population()
+            # add the best into the population, twice
+            new_population.extend([best_player, best_player])
+
             parents = self.select_parents()
-            for i in range(0, self.population_size, 2):
+            for i in range(0, len(parents) - 2, 2):
                 parent1, parent2 = parents[i], parents[i + 1]
                 child1, child2 = self.crossover_model_vectors(parent1, parent2)
                 self.mutate_model(child1)
                 self.mutate_model(child2)
                 child1_model = generate_game_model()
                 child2_model = generate_game_model()
-                child1 = child1_model.load_state_dict(torchga.model_weights_as_dict(child1_model, child1))
-                child2 = child2_model.load_state_dict(torchga.model_weights_as_dict(child2_model, child2))
-                new_population.extend([(child1, -1), (child2, -1)])
+                child1_model.load_state_dict(torchga.model_weights_as_dict(child1_model, child1))
+                child2_model.load_state_dict(torchga.model_weights_as_dict(child2_model, child2))
+                new_population.extend([(child1_model, -1), (child2_model, -1)])
+
+            self.generation += 1
+            generation_string = f"Generation: {self.generation}"
+            print(generation_string)
+            set_label_text(generations_label, generation_string)
+
+            results = [x[1] for x in self.population]
+            mean_string = f"Mean checkpoints: {statistics.mean(results)}"
+            print(mean_string)
+            set_label_text(mean_label, mean_string)
+            median_string = f"Median checkpoints: {statistics.median(results)}"
+            print(median_string)
+            set_label_text(median_label, median_string)
+            best_string = f"Best checkpoints: {max(results)}"
+            print(best_string)
+            set_label_text(best_label, best_string)
+            print()
 
             self.population = new_population
-
-        self.generation += number_of_generations
-        set_label_text(generations_label, f"Generation: {self.generation}")
-        self.main_menu.enable()
 
     def create_new_population(self):
         self.population = [(generate_game_model(), -1) for _ in range(self.population_size)]
@@ -279,13 +318,20 @@ class Game:
             if game_over:
                 break
 
-        print(f"{index}, number of checkpoints: {drive.checkpoint_counter}")
-
         self.population[index] = (model, drive.checkpoint_counter)
 
     def select_parents(self):
+        # todo roulette
+        # https://stackoverflow.com/a/52243810
+        # max = sum([c.fitness for c in population])
+        # selection_probs = [c.fitness / max for c in population]
+        # return population[npr.choice(len(population), p=selection_probs)]
+
         parents = []
-        for _ in range(self.population_size):
+        best_from_population = self.get_best_player_from_population()
+        # add the best into the parents
+        parents.append(torchga.model_weights_as_vector(best_from_population[0]))
+        for _ in range(self.population_size - 1):
             opponent1, opponent2 = random.sample(self.population, 2)
             if opponent1[1] > opponent2[1]:  # if opponent1 is better than opponent2
                 parents.append(torchga.model_weights_as_vector(opponent1[0]))
@@ -299,16 +345,18 @@ class Game:
         len_model = len(model_vector1)
         child_vector1 = copy.deepcopy(model_vector1)
         child_vector2 = copy.deepcopy(model_vector2)
-        crossover_point = random.randint(0, len_model)
-        for i in range(crossover_point, len_model):
+        crossover_point1 = random.randint(0, len_model)
+        crossover_point2 = random.randint(crossover_point1, len_model)
+        for i in range(crossover_point1, crossover_point2):
             child_vector1[i] = model_vector2[i]
             child_vector2[i] = model_vector1[i]
         return child_vector1, child_vector2
 
     def mutate_model(self, model_vector):
-        for i in range(model_vector):
-            if random.random() < self.mutation_chance:
-                model_vector[i] = random.random() - 0.5  # between -0.5 and 0.5
+        if random.random() < self.mutation_chance:
+            for i in range(len(model_vector)):
+                if random.random() < self.mutation_percent_genes:
+                    model_vector[i] = random.random() - 0.5  # between -0.5 and 0.5
 
     def change_generation_size(self, size):
         self.population_size = size
@@ -318,6 +366,12 @@ class Game:
 
     def change_mutation_chance(self, chance):
         self.mutation_chance = chance
+
+    def change_generation_time(self, time):
+        self.generation_time = time * 1000
+
+    def change_mutation_percent_genes(self, percent):
+        self.mutation_percent_genes = percent
 
     def create_track(self):
         self.main_menu.disable()
@@ -336,7 +390,8 @@ class Game:
         else:
             path = "/".join(self.track_image_path.split('/')[:-1])
             with open(f"{path}/track_data.json", 'w') as file:
-                json.dump((create.checkpoints, create.start_position, create.start_angle), file)
+                # todo fix angle saving
+                json.dump((create.checkpoints, create.start_position, create.start_angle + 270), file)
 
         self.load_assets()
         self.main_menu.enable()
