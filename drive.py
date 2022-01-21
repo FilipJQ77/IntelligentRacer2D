@@ -43,8 +43,8 @@ class Drive:
         # next 3 checkpoints
         len_checkpoints = len(self.checkpoints)
         checkpoint_1 = self.checkpoints[self.checkpoint_counter % len_checkpoints]
-        # checkpoint_2 = game.checkpoints[(game.checkpoint_counter + 1) % len_checkpoints]
-        # checkpoint_3 = game.checkpoints[(game.checkpoint_counter + 2) % len_checkpoints]
+        checkpoint_2 = self.checkpoints[(self.checkpoint_counter + 1) % len_checkpoints]
+        checkpoint_3 = self.checkpoints[(self.checkpoint_counter + 2) % len_checkpoints]
 
         state = [
             # current car state

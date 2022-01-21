@@ -2,8 +2,11 @@ import copy
 import json
 import random
 import statistics
+from datetime import datetime
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+
+import matplotlib.pyplot as plt
 
 import pygame
 import pygame_menu
@@ -41,7 +44,7 @@ def generate_generic_model(in_size, hidden_size, out_size):
 
 
 def generate_game_model():
-    return generate_generic_model(8, 256, 4)
+    return generate_generic_model(8, 64, 4)  # todo consider adding 2nd/3rd checkpoint to state
 
 
 class Game:
@@ -58,10 +61,11 @@ class Game:
         self.checkpoints, self.start_position, self.start_angle = json.load(open(self.track_data_path))  # default
 
         self.generation = 0
+        self.generation_stats = []  # (mean, median, best)
         self.population_size = 50
         self.crossover_chance = 0.8
-        self.mutation_chance = 0.01
-        self.mutation_percent_genes = 0.1
+        self.mutation_chance = 0.03
+        self.mutation_percent_genes = 0.005
         self.generation_time = 2000
         self.finish_time = pygame.time.get_ticks()
 
@@ -122,11 +126,14 @@ class Game:
         train_menu.add.button("Train 10 generations",
                               lambda: self.train_generations(10, generation_label, mean_label, median_label,
                                                              best_label))
+        # todo train until stop (hold esc to stop)
         train_menu.add.button("Train 100 generations",
                               lambda: self.train_generations(100, generation_label, mean_label, median_label,
                                                              best_label))
-        train_menu.add.button("Show best player", lambda: self.show_best_player())
-        # todo show best player and save model
+        train_menu.add.button("Show best player", lambda: self.show_player(self.get_best_player_from_population()[0]))
+        train_menu.add.button("Save best player model", lambda: self.save_best_player())
+        train_menu.add.button("Load model and play it", lambda: self.load_and_show_model())
+        train_menu.add.button("Plot training results", lambda: self.plot_generation_stats())
 
         return train_menu
 
@@ -186,8 +193,7 @@ class Game:
 
         self.main_menu.enable()
 
-    def show_best_player(self):
-        model = self.get_best_player_from_population()[0]
+    def show_player(self, model):
         self.main_menu.disable()
         self.window = pygame.display.set_mode((self.track_image.get_width(), self.track_image.get_height()))
 
@@ -229,17 +235,15 @@ class Game:
         return drive.checkpoint_counter
 
     def get_best_player_from_population(self):
-        maxx, index = -1, -1
+        maxi, index = -1, -1
         for i in range(len(self.population)):
-            if self.population[i][1] > maxx:
-                maxx = self.population[i][1]
+            if self.population[i][1] > maxi:
+                maxi = self.population[i][1]
                 index = i
         return self.population[index]
 
     def train_generations(self, number_of_generations, generations_label, mean_label, median_label, best_label):
-        # self.main_menu.disable()
         for _ in range(number_of_generations):
-            # start with 3s, increase by 0.5s, stop at 30s
             self.finish_time = pygame.time.get_ticks() + self.generation_time
             with ThreadPool() as pool:
                 # run every AI parallel
@@ -268,22 +272,30 @@ class Game:
             set_label_text(generations_label, generation_string)
 
             results = [x[1] for x in self.population]
-            mean_string = f"Mean checkpoints: {statistics.mean(results)}"
+            mean = statistics.mean(results)
+            mean_string = f"Mean checkpoints: {mean}"
             print(mean_string)
             set_label_text(mean_label, mean_string)
-            median_string = f"Median checkpoints: {statistics.median(results)}"
+
+            median = statistics.median(results)
+            median_string = f"Median checkpoints: {median}"
             print(median_string)
             set_label_text(median_label, median_string)
-            best_string = f"Best checkpoints: {max(results)}"
+
+            best = max(results)
+            best_string = f"Best checkpoints: {best}"
             print(best_string)
             set_label_text(best_label, best_string)
             print()
+
+            self.generation_stats.append((mean, median, best))
 
             self.population = new_population
 
     def create_new_population(self):
         self.population = [(generate_game_model(), -1) for _ in range(self.population_size)]
         self.generation = 0
+        self.generation_stats = []
 
     def train_ai(self, index):
         drive = Drive(self.window, self.track_image, self.track_border_image, self.car_image, self.car_specification,
@@ -321,22 +333,24 @@ class Game:
         self.population[index] = (model, drive.checkpoint_counter)
 
     def select_parents(self):
-        # todo roulette
-        # https://stackoverflow.com/a/52243810
-        # max = sum([c.fitness for c in population])
-        # selection_probs = [c.fitness / max for c in population]
-        # return population[npr.choice(len(population), p=selection_probs)]
-
         parents = []
-        best_from_population = self.get_best_player_from_population()
         # add the best into the parents
+        best_from_population = self.get_best_player_from_population()
         parents.append(torchga.model_weights_as_vector(best_from_population[0]))
+
+        # https://stackoverflow.com/a/52243810
+        maxi = sum([x[1] for x in self.population])
+        if maxi == 0:
+            # if every solution is 'bad' then every solution has equal probability
+            maxi = len(self.population)
+            selection_probabilities = [1 / maxi for _ in self.population]
+        else:
+            selection_probabilities = [x[1] / maxi for x in self.population]
+
         for _ in range(self.population_size - 1):
-            opponent1, opponent2 = random.sample(self.population, 2)
-            if opponent1[1] > opponent2[1]:  # if opponent1 is better than opponent2
-                parents.append(torchga.model_weights_as_vector(opponent1[0]))
-            else:
-                parents.append(torchga.model_weights_as_vector(opponent2[0]))
+            parents.append(torchga.model_weights_as_vector(
+                self.population[npr.choice(len(self.population), p=selection_probabilities)][0]))
+
         return parents
 
     def crossover_model_vectors(self, model_vector1, model_vector2):
@@ -372,6 +386,18 @@ class Game:
 
     def change_mutation_percent_genes(self, percent):
         self.mutation_percent_genes = percent
+
+    def plot_generation_stats(self):
+        x_data = [i for i in range(1, self.generation + 1)]
+        fig = plt.figure()
+        fig.suptitle("Training results")
+        plt.xlabel(f"Generation")
+        plt.ylabel("Number of checkpoints")
+        plt.plot(x_data, [x[0] for x in self.generation_stats], label='Mean')
+        plt.plot(x_data, [x[1] for x in self.generation_stats], label='Median')
+        plt.plot(x_data, [x[2] for x in self.generation_stats], label='Best')
+        plt.legend()
+        fig.waitforbuttonpress()
 
     def create_track(self):
         self.main_menu.disable()
@@ -418,6 +444,21 @@ class Game:
             self.track_border_image = pygame.image.load(self.track_border_image_path)
             with open(self.track_data_path, 'r') as file:
                 self.checkpoints, self.start_position, self.start_angle = json.load(file)
+        except Exception as e:
+            print(e)
+
+    def save_best_player(self):
+        best = self.get_best_player_from_population()[0]
+        filepath = f"models/model-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+        torch.save(best.state_dict(), filepath)
+
+    def load_and_show_model(self):
+        model_path = get_filename_dialog()
+        try:
+            model = generate_game_model()
+            model.load_state_dict(torch.load(model_path))
+            model.eval()
+            self.show_player(model)
         except Exception as e:
             print(e)
 
